@@ -112,6 +112,7 @@ func (p *Provisioner) Prepare(raws ...interface{}) error {
 }
 
 func (p *Provisioner) Provision(ctx context.Context, ui packer.Ui, comm packer.Communicator, _ map[string]interface{}) error {
+	uploadTimeout := 5 * time.Minute
 	ui.Say("Uploading the Windows update elevated script...")
 	var buffer bytes.Buffer
 	err := elevatedTemplate.Execute(&buffer, elevatedOptions{
@@ -125,10 +126,15 @@ func (p *Provisioner) Provision(ctx context.Context, ui packer.Ui, comm packer.C
 		fmt.Printf("Error creating elevated template: %s", err)
 		return err
 	}
-	err = comm.Upload(
-		elevatedPath,
-		bytes.NewReader(buffer.Bytes()),
-		nil)
+	err = retry.Config{StartTimeout: uploadTimeout}.Run(ctx, func(context.Context) error {
+		if err := comm.Upload(
+			elevatedPath,
+			bytes.NewReader(buffer.Bytes()),
+			nil); err != nil {
+			return fmt.Errorf("Error uploading the Windows update elevated script: %s", err)
+		}
+		return nil
+	})
 	if err != nil {
 		return err
 	}
@@ -146,10 +152,15 @@ func (p *Provisioner) Provision(ctx context.Context, ui packer.Ui, comm packer.C
 		fmt.Printf("Error creating elevated template: %s", err)
 		return err
 	}
-	err = comm.Upload(
-		pendingRebootElevatedPath,
-		bytes.NewReader(buffer.Bytes()),
-		nil)
+	err = retry.Config{StartTimeout: uploadTimeout}.Run(ctx, func(context.Context) error {
+		if err := comm.Upload(
+			pendingRebootElevatedPath,
+			bytes.NewReader(buffer.Bytes()),
+			nil); err != nil {
+			return fmt.Errorf("Error uploading the Windows update check for reboot required elevated script: %s", err)
+		}
+		return nil
+	})
 	if err != nil {
 		return err
 	}
