@@ -129,7 +129,7 @@ func (p *Provisioner) Provision(ctx context.Context, ui packer.Ui, comm packer.C
 		Command:         p.windowsUpdateCommand(),
 	})
 	if err != nil {
-		fmt.Printf("Error creating elevated template: %s", err)
+		ui.Error(fmt.Sprintf("Error creating Windows update elevated template: %s", err))
 		return err
 	}
 	err = retry.Config{StartTimeout: uploadTimeout}.Run(ctx, func(context.Context) error {
@@ -142,6 +142,7 @@ func (p *Provisioner) Provision(ctx context.Context, ui packer.Ui, comm packer.C
 		return nil
 	})
 	if err != nil {
+		ui.Error(err.Error())
 		return err
 	}
 
@@ -155,7 +156,7 @@ func (p *Provisioner) Provision(ctx context.Context, ui packer.Ui, comm packer.C
 		Command:         p.windowsUpdateCheckForRebootRequiredCommand(),
 	})
 	if err != nil {
-		fmt.Printf("Error creating elevated template: %s", err)
+		ui.Error(fmt.Sprintf("Error creating Windows update check for reboot required elevated template: %s", err))
 		return err
 	}
 	err = retry.Config{StartTimeout: uploadTimeout}.Run(ctx, func(context.Context) error {
@@ -168,6 +169,7 @@ func (p *Provisioner) Provision(ctx context.Context, ui packer.Ui, comm packer.C
 		return nil
 	})
 	if err != nil {
+		ui.Error(err.Error())
 		return err
 	}
 
@@ -177,12 +179,14 @@ func (p *Provisioner) Provision(ctx context.Context, ui packer.Ui, comm packer.C
 		bytes.NewReader(windowsUpdatePs1),
 		nil)
 	if err != nil {
+		ui.Error(err.Error())
 		return err
 	}
 
 	for {
 		restartPending, err := p.update(ctx, ui, comm)
 		if err != nil {
+			ui.Error(err.Error())
 			return err
 		}
 
@@ -192,6 +196,7 @@ func (p *Provisioner) Provision(ctx context.Context, ui packer.Ui, comm packer.C
 
 		err = p.restart(ctx, ui, comm)
 		if err != nil {
+			ui.Error(err.Error())
 			return err
 		}
 	}
@@ -207,7 +212,7 @@ func (p *Provisioner) update(ctx context.Context, ui packer.Ui, comm packer.Comm
 		cmd := &packer.RemoteCmd{Command: elevatedCommand}
 		err := cmd.RunWithUi(ctx, comm, ui)
 		if err != nil {
-			return err
+			return fmt.Errorf("Failed to run Windows update script: %v", err)
 		}
 		var exitStatus = cmd.ExitStatus()
 		switch exitStatus {
@@ -231,7 +236,7 @@ func (p *Provisioner) restart(ctx context.Context, ui packer.Ui, comm packer.Com
 			cmd := &packer.RemoteCmd{Command: restartCommand}
 			err := cmd.RunWithUi(ctx, comm, ui)
 			if err != nil {
-				return err
+				return fmt.Errorf("Failed to run Windows restart command: %v", err)
 			}
 			exitStatus := cmd.ExitStatus()
 			if exitStatus != 0 {
@@ -249,7 +254,7 @@ func (p *Provisioner) restart(ctx context.Context, ui packer.Ui, comm packer.Com
 			cmd := &packer.RemoteCmd{Command: testRestartCommand}
 			err := cmd.RunWithUi(ctx, comm, ui)
 			if err != nil {
-				return err
+				return fmt.Errorf("Failed to run test Windows restart command: %v", err)
 			}
 			exitStatus := cmd.ExitStatus()
 			if exitStatus != 0 {
@@ -257,8 +262,10 @@ func (p *Provisioner) restart(ctx context.Context, ui packer.Ui, comm packer.Com
 			}
 			cmd = &packer.RemoteCmd{Command: abortTestRestartCommand}
 			err = cmd.RunWithUi(ctx, comm, ui)
-
-			return err
+			if err != nil {
+				return fmt.Errorf("Failed to run abort test Windows restart command: %v", err)
+			}
+			return nil
 		})
 		if err != nil {
 			return err
@@ -269,7 +276,7 @@ func (p *Provisioner) restart(ctx context.Context, ui packer.Ui, comm packer.Com
 			cmd := &packer.RemoteCmd{Command: pendingRebootElevatedCommand}
 			err = cmd.RunWithUi(ctx, comm, ui)
 			if err != nil {
-				return err
+				return fmt.Errorf("Failed to run check for reboot required command: %v", err)
 			}
 
 			exitStatus := cmd.ExitStatus()
@@ -282,7 +289,7 @@ func (p *Provisioner) restart(ctx context.Context, ui packer.Ui, comm packer.Com
 				return fmt.Errorf("Machine not yet available (exit status %d)", exitStatus)
 			}
 
-			return err
+			return nil
 		})
 		if err != nil {
 			return err
