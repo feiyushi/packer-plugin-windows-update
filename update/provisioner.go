@@ -174,10 +174,15 @@ func (p *Provisioner) Provision(ctx context.Context, ui packer.Ui, comm packer.C
 	}
 
 	ui.Say("Uploading the Windows update script...")
-	err = comm.Upload(
-		windowsUpdatePath,
-		bytes.NewReader(windowsUpdatePs1),
-		nil)
+	err = retry.Config{StartTimeout: uploadTimeout}.Run(ctx, func(context.Context) error {
+		if err := comm.Upload(
+			windowsUpdatePath,
+			bytes.NewReader(windowsUpdatePs1),
+			nil); err != nil {
+			return fmt.Errorf("Error uploading the Windows update script: %s", err)
+		}
+		return nil
+	})
 	if err != nil {
 		ui.Error(err.Error())
 		return err
